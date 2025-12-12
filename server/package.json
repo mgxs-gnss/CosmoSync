@@ -1,15 +1,12 @@
 {
   "name": "point-world-server",
   "version": "1.0.0",
-  "description": "PartyServer game server for Point World",
+  "description": "Cloudflare Workers game server for Point World",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail"
-  },
-  "dependencies": {
-    "partyserver": "^0.0.57"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241205.0",

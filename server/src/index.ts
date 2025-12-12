@@ -1,14 +1,14 @@
-import { PartyServer, type Connection, type ConnectionContext } from "partyserver";
+// Point World - Cloudflare Workers + Durable Objects
 
 // Configuration
-const TICK_RATE = 60;        // 60fps game loop
+const TICK_RATE = 60;
 const WORLD_WIDTH = 800;
 const WORLD_HEIGHT = 600;
 const POINT_COUNT = 30;
 const POINT_SPEED = 0.5;
 const PLAYER_SPEED = 5;
 const COLLECTION_RADIUS = 25;
-const SAVE_INTERVAL = 30000; // Save every 30 seconds
+const SAVE_INTERVAL = 30000;
 const TICK_INTERVAL = 1000 / TICK_RATE;
 
 interface Point {
@@ -29,9 +29,8 @@ interface Player {
   input: { up: boolean; down: boolean; left: boolean; right: boolean };
 }
 
-interface GameState {
-  points: Point[];
-  lastSave: number;
+interface Env {
+  POINT_WORLD: DurableObjectNamespace;
 }
 
 const COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
@@ -51,19 +50,29 @@ function createPoint(id: number): Point {
   };
 }
 
-export default class PointWorld extends PartyServer {
+// Durable Object class
+export class PointWorld {
+  state: DurableObjectState;
   points: Point[] = [];
   players: Map<string, Player> = new Map();
-  lastTick: number = 0;
+  connections: Map<string, WebSocket> = new Map();
+  lastSave: number = 0;
+  initialized: boolean = false;
 
-  async onStart(): Promise<void> {
+  constructor(state: DurableObjectState) {
+    this.state = state;
+  }
+
+  async initialize() {
+    if (this.initialized) return;
+    this.initialized = true;
+
     // Load saved state
-    const savedState = await this.ctx.storage.get<GameState>("gameState");
-    if (savedState) {
-      this.points = savedState.points;
+    const savedPoints = await this.state.storage.get<Point[]>("points");
+    if (savedPoints) {
+      this.points = savedPoints;
       console.log("Loaded saved game state");
     } else {
-      // Initialize points
       this.points = [];
       for (let i = 0; i < POINT_COUNT; i++) {
         this.points.push(createPoint(i));
@@ -71,102 +80,116 @@ export default class PointWorld extends PartyServer {
       console.log("Initialized new game state");
     }
 
-    // Start the game loop using alarm
-    await this.scheduleNextTick();
+    // Start game loop
+    await this.state.storage.setAlarm(Date.now() + TICK_INTERVAL);
   }
 
-  async scheduleNextTick(): Promise<void> {
-    // Schedule next tick - Durable Objects alarm for persistent simulation
-    await this.ctx.storage.setAlarm(Date.now() + TICK_INTERVAL);
+  async fetch(request: Request): Promise<Response> {
+    await this.initialize();
+
+    const url = new URL(request.url);
+
+    // Handle WebSocket upgrade
+    if (request.headers.get("Upgrade") === "websocket") {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+
+      const connectionId = crypto.randomUUID();
+
+      server.accept();
+      this.connections.set(connectionId, server);
+
+      server.addEventListener("message", async (event) => {
+        try {
+          const data = JSON.parse(event.data as string);
+          await this.handleMessage(connectionId, server, data);
+        } catch (err) {
+          console.error("Error handling message:", err);
+        }
+      });
+
+      server.addEventListener("close", () => {
+        const player = this.players.get(connectionId);
+        if (player) {
+          console.log(`Player ${player.id} disconnected`);
+        }
+        this.players.delete(connectionId);
+        this.connections.delete(connectionId);
+      });
+
+      return new Response(null, { status: 101, webSocket: client });
+    }
+
+    // Health check
+    return new Response("Point World Server Running", { status: 200 });
   }
 
-  async onAlarm(): Promise<void> {
+  async handleMessage(connectionId: string, ws: WebSocket, data: any) {
+    switch (data.type) {
+      case "join": {
+        const playerId = data.playerId || connectionId;
+        const savedScore = await this.state.storage.get<number>(`player:${playerId}`) || 0;
+
+        const player: Player = {
+          id: playerId,
+          x: Math.random() * WORLD_WIDTH,
+          y: Math.random() * WORLD_HEIGHT,
+          score: savedScore,
+          color: randomColor(),
+          input: { up: false, down: false, left: false, right: false }
+        };
+
+        this.players.set(connectionId, player);
+
+        ws.send(JSON.stringify({
+          type: "welcome",
+          playerId,
+          score: savedScore,
+          worldWidth: WORLD_WIDTH,
+          worldHeight: WORLD_HEIGHT
+        }));
+
+        console.log(`Player ${playerId} joined (score: ${savedScore})`);
+        break;
+      }
+
+      case "input": {
+        const player = this.players.get(connectionId);
+        if (player) {
+          player.input = {
+            up: !!data.up,
+            down: !!data.down,
+            left: !!data.left,
+            right: !!data.right
+          };
+        }
+        break;
+      }
+    }
+  }
+
+  async alarm() {
     this.gameTick();
-    await this.scheduleNextTick();
+
+    // Schedule next tick
+    await this.state.storage.setAlarm(Date.now() + TICK_INTERVAL);
 
     // Periodic save
     const now = Date.now();
-    if (now - this.lastTick > SAVE_INTERVAL) {
+    if (now - this.lastSave > SAVE_INTERVAL) {
       await this.saveState();
-      this.lastTick = now;
+      this.lastSave = now;
     }
   }
 
-  async onConnect(connection: Connection, ctx: ConnectionContext): Promise<void> {
-    // Player joins when they send a join message
-    console.log(`Connection opened: ${connection.id}`);
-  }
-
-  async onMessage(connection: Connection, message: string): Promise<void> {
-    try {
-      const data = JSON.parse(message);
-
-      switch (data.type) {
-        case "join": {
-          const playerId = data.playerId || connection.id;
-
-          // Load player score from storage
-          const savedScore = await this.ctx.storage.get<number>(`player:${playerId}`) || 0;
-
-          const player: Player = {
-            id: playerId,
-            x: Math.random() * WORLD_WIDTH,
-            y: Math.random() * WORLD_HEIGHT,
-            score: savedScore,
-            color: randomColor(),
-            input: { up: false, down: false, left: false, right: false }
-          };
-
-          this.players.set(connection.id, player);
-
-          // Send welcome message
-          connection.send(JSON.stringify({
-            type: "welcome",
-            playerId,
-            score: savedScore,
-            worldWidth: WORLD_WIDTH,
-            worldHeight: WORLD_HEIGHT
-          }));
-
-          console.log(`Player ${playerId} joined (score: ${savedScore})`);
-          break;
-        }
-
-        case "input": {
-          const player = this.players.get(connection.id);
-          if (player) {
-            player.input = {
-              up: !!data.up,
-              down: !!data.down,
-              left: !!data.left,
-              right: !!data.right
-            };
-          }
-          break;
-        }
-      }
-    } catch (err) {
-      console.error("Error processing message:", err);
-    }
-  }
-
-  onClose(connection: Connection): void {
-    const player = this.players.get(connection.id);
-    if (player) {
-      console.log(`Player ${player.id} disconnected`);
-      this.players.delete(connection.id);
-    }
-  }
-
-  gameTick(): void {
-    // Update player positions based on input
+  gameTick() {
+    // Update player positions
     for (const player of this.players.values()) {
       if (player.input.up) player.y -= PLAYER_SPEED;
       if (player.input.down) player.y += PLAYER_SPEED;
       if (player.input.left) player.x -= PLAYER_SPEED;
       if (player.input.right) player.x += PLAYER_SPEED;
 
-      // Keep player in bounds
       player.x = Math.max(15, Math.min(WORLD_WIDTH - 15, player.x));
       player.y = Math.max(15, Math.min(WORLD_HEIGHT - 15, player.y));
     }
@@ -199,18 +222,14 @@ export default class PointWorld extends PartyServer {
         if (distance < COLLECTION_RADIUS) {
           player.score += point.value;
           collected.push({ playerId: player.id, pointId: point.id, value: point.value });
-
-          // Save player score
-          this.ctx.storage.put(`player:${player.id}`, player.score);
-
-          // Respawn point
+          this.state.storage.put(`player:${player.id}`, player.score);
           this.points[i] = createPoint(point.id);
         }
       }
     }
 
-    // Broadcast state to all connected clients
-    const state = {
+    // Broadcast state
+    const state = JSON.stringify({
       type: "state",
       players: Array.from(this.players.values()).map(p => ({
         id: p.id,
@@ -220,25 +239,59 @@ export default class PointWorld extends PartyServer {
         color: p.color
       })),
       points: this.points.map(p => ({ id: p.id, x: p.x, y: p.y, value: p.value }))
-    };
+    });
 
-    this.broadcast(JSON.stringify(state));
+    this.broadcast(state);
 
-    // Notify about collected points
     if (collected.length > 0) {
-      this.broadcast(JSON.stringify({
-        type: "collected",
-        points: collected
-      }));
+      this.broadcast(JSON.stringify({ type: "collected", points: collected }));
     }
   }
 
-  async saveState(): Promise<void> {
-    const state: GameState = {
-      points: this.points,
-      lastSave: Date.now()
-    };
-    await this.ctx.storage.put("gameState", state);
+  broadcast(message: string) {
+    for (const ws of this.connections.values()) {
+      try {
+        ws.send(message);
+      } catch (err) {
+        // Connection might be closed
+      }
+    }
+  }
+
+  async saveState() {
+    await this.state.storage.put("points", this.points);
     console.log("Game state saved");
   }
 }
+
+// Worker entry point
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+
+    // CORS headers
+    const corsHeaders = {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+    };
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    // Route to the single global game world
+    const id = env.POINT_WORLD.idFromName("main");
+    const stub = env.POINT_WORLD.get(id);
+
+    const response = await stub.fetch(request);
+
+    // Add CORS headers to response
+    const newResponse = new Response(response.body, response);
+    Object.entries(corsHeaders).forEach(([key, value]) => {
+      newResponse.headers.set(key, value);
+    });
+
+    return newResponse;
+  }
+};
