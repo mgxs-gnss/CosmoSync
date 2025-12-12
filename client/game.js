@@ -1,4 +1,4 @@
-// Point World Client - PartySocket Edition
+// Point World Client - Cloudflare Workers Edition
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreDisplay = document.getElementById('score');
@@ -15,8 +15,7 @@ const COLLECTION_RADIUS = 25;
 const TICK_RATE = 60;
 
 // Server configuration - UPDATE THIS after deploying to Cloudflare
-const PARTYSERVER_HOST = window.PARTYSERVER_HOST || 'point-world.your-account.workers.dev';
-const ROOM_NAME = 'main'; // Single global world
+const WORKER_HOST = window.WORKER_HOST || 'point-world.your-account.workers.dev';
 
 // Get or create player ID
 let playerId = localStorage.getItem('pointworld_player_id');
@@ -150,11 +149,9 @@ function demoGameLoop() {
   updateLeaderboard();
 }
 
-// Connect using PartySocket pattern for Cloudflare Workers
+// Connect to Cloudflare Worker
 function connect() {
-  // PartyServer WebSocket URL pattern
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${PARTYSERVER_HOST}/parties/pointworld/${ROOM_NAME}`;
+  const wsUrl = `wss://${WORKER_HOST}`;
 
   console.log('Connecting to:', wsUrl);
 
@@ -175,7 +172,7 @@ function connect() {
 
   socket.onopen = () => {
     clearTimeout(connectionTimeout);
-    console.log('Connected to PartyServer');
+    console.log('Connected to server');
     connectionStatus.textContent = 'Connected';
     connectionStatus.className = 'connected';
     reconnectAttempts = 0;
