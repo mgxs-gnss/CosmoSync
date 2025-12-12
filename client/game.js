@@ -1,4 +1,4 @@
-// Point World Client - with Demo Mode
+// Point World Client - PartySocket Edition
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreDisplay = document.getElementById('score');
@@ -12,7 +12,11 @@ const POINT_COUNT = 30;
 const POINT_SPEED = 0.5;
 const PLAYER_SPEED = 5;
 const COLLECTION_RADIUS = 25;
-const TICK_RATE = 20;
+const TICK_RATE = 60;
+
+// Server configuration - UPDATE THIS after deploying to Cloudflare
+const PARTYSERVER_HOST = window.PARTYSERVER_HOST || 'point-world.your-account.workers.dev';
+const ROOM_NAME = 'main'; // Single global world
 
 // Get or create player ID
 let playerId = localStorage.getItem('pointworld_player_id');
@@ -40,13 +44,9 @@ const keys = {
   right: false
 };
 
-// WebSocket connection
-const WS_URL = window.WEBSOCKET_URL ||
-  (window.location.hostname === 'localhost' ? 'ws://localhost:8080' : 'wss://point-world-server.fly.dev');
-
-let ws = null;
+let socket = null;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 3; // Fewer attempts before switching to demo mode
+const MAX_RECONNECT_ATTEMPTS = 3;
 
 // Generate a random color for players
 function randomColor() {
@@ -94,7 +94,7 @@ function startDemoMode() {
   scoreDisplay.textContent = myScore;
   updateLeaderboard();
 
-  // Start game loop
+  // Start game loop at 60fps for demo mode
   setInterval(demoGameLoop, 1000 / TICK_RATE);
 }
 
@@ -150,9 +150,16 @@ function demoGameLoop() {
   updateLeaderboard();
 }
 
+// Connect using PartySocket pattern for Cloudflare Workers
 function connect() {
+  // PartyServer WebSocket URL pattern
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${PARTYSERVER_HOST}/parties/pointworld/${ROOM_NAME}`;
+
+  console.log('Connecting to:', wsUrl);
+
   try {
-    ws = new WebSocket(WS_URL);
+    socket = new WebSocket(wsUrl);
   } catch (e) {
     console.log('WebSocket not available, starting demo mode');
     startDemoMode();
@@ -160,27 +167,27 @@ function connect() {
   }
 
   const connectionTimeout = setTimeout(() => {
-    if (ws.readyState !== WebSocket.OPEN) {
-      ws.close();
+    if (socket.readyState !== WebSocket.OPEN) {
+      socket.close();
       startDemoMode();
     }
-  }, 3000);
+  }, 5000);
 
-  ws.onopen = () => {
+  socket.onopen = () => {
     clearTimeout(connectionTimeout);
-    console.log('Connected to server');
+    console.log('Connected to PartyServer');
     connectionStatus.textContent = 'Connected';
     connectionStatus.className = 'connected';
     reconnectAttempts = 0;
     demoMode = false;
 
-    ws.send(JSON.stringify({
+    socket.send(JSON.stringify({
       type: 'join',
       playerId
     }));
   };
 
-  ws.onmessage = (event) => {
+  socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
 
     switch (message.type) {
@@ -211,7 +218,7 @@ function connect() {
     }
   };
 
-  ws.onclose = () => {
+  socket.onclose = () => {
     clearTimeout(connectionTimeout);
     console.log('Disconnected from server');
     connectionStatus.textContent = 'Disconnected';
@@ -227,14 +234,14 @@ function connect() {
     }
   };
 
-  ws.onerror = (error) => {
+  socket.onerror = (error) => {
     console.error('WebSocket error:', error);
   };
 }
 
 function sendInput() {
-  if (!demoMode && ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
+  if (!demoMode && socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify({
       type: 'input',
       ...keys
     }));
@@ -329,7 +336,7 @@ function updateLeaderboard() {
   }).join('');
 }
 
-// Render loop
+// Render loop (always 60fps)
 function render() {
   // Clear canvas with slight trail effect
   ctx.fillStyle = 'rgba(10, 10, 26, 0.3)';
@@ -442,9 +449,9 @@ function render() {
 connect();
 render();
 
-// Send input continuously while keys are held (for multiplayer mode)
+// Send input continuously while keys are held
 setInterval(() => {
   if (!demoMode && (keys.up || keys.down || keys.left || keys.right)) {
     sendInput();
   }
-}, 50);
+}, 16); // ~60fps input rate

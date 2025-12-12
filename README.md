@@ -4,32 +4,37 @@ A persistent multiplayer 2D game where points float around the world and players
 
 - **Realtime multiplayer** - see other players moving
 - **Persistent scores** - your points are saved forever
-- **Always running** - simulation continues even with no players
+- **Always running** - simulation continues even with no players (using Durable Objects alarms)
 - **One global world** - everyone shares the same space
+- **60fps** - smooth gameplay on both server and client
 
 ## Architecture
 
 ```
-┌─────────────┐     WebSocket     ┌─────────────┐     ┌─────────────┐
-│   Vercel    │◀─────────────────▶│  Railway    │────▶│   Upstash   │
-│  (client)   │                   │  (server)   │     │   (Redis)   │
-└─────────────┘                   └─────────────┘     └─────────────┘
+┌─────────────┐     WebSocket     ┌─────────────────────┐
+│   Vercel    │◀─────────────────▶│  Cloudflare Workers │
+│  (client)   │                   │  (PartyServer)      │
+└─────────────┘                   │  + Durable Objects  │
+                                  └─────────────────────┘
 ```
+
+**No external database needed!** Durable Objects have built-in persistent storage.
 
 ## How It Works
 
 ### World Simulation
 
-The server runs a game loop at 20 ticks/second that:
+The server runs a game loop at 60 ticks/second using Durable Objects alarms:
 - Moves all floating points around (with bouncing physics)
 - Checks for player-point collisions
 - Broadcasts state to all connected clients
+- **Continues running even with no players connected**
 
 ### Persistence
 
-- **Player scores**: Saved to Redis immediately when a point is collected
-- **World state**: Saved every 30 seconds
-- **On restart**: Server loads the last saved state from Redis
+- **Player scores**: Saved to Durable Objects storage immediately
+- **World state**: Auto-saved every 30 seconds
+- **On restart**: Server loads the last saved state automatically
 
 ### Anonymous Players
 
@@ -37,42 +42,47 @@ Players get a random ID stored in localStorage. Same browser = same player = sam
 
 ## Deployment
 
-### Server (Railway)
+### Server (Cloudflare Workers)
 
-1. Go to [railway.app](https://railway.app) and create a new project
-2. Select "Deploy from GitHub repo"
-3. Choose this repository
-4. Set the root directory to `server`
-5. Add environment variable:
-   - `REDIS_URL` = your Upstash Redis URL
-6. Railway will auto-deploy and give you a URL like `https://your-app.up.railway.app`
+1. Install Wrangler CLI:
+   ```bash
+   npm install -g wrangler
+   wrangler login
+   ```
+
+2. Deploy the server:
+   ```bash
+   cd server
+   npm install
+   npm run deploy
+   ```
+
+3. Note your Worker URL: `https://point-world.<your-account>.workers.dev`
 
 ### Client (Vercel)
 
-1. Go to [vercel.com/new](https://vercel.com/new)
-2. Import this GitHub repository
-3. Add environment variable:
-   - `WEBSOCKET_URL` = `wss://your-railway-app.up.railway.app`
-4. Deploy - Vercel will serve the `client/` folder
+1. Update `client/game.js` line 18 with your Worker URL:
+   ```javascript
+   const PARTYSERVER_HOST = 'point-world.your-account.workers.dev';
+   ```
 
-### Redis (Upstash)
-
-1. Create a free Redis database at [upstash.com](https://upstash.com)
-2. Copy the Redis URL and add it to Railway
+2. Go to [vercel.com/new](https://vercel.com/new)
+3. Import this GitHub repository
+4. Deploy
 
 ## Demo Mode
 
 If no server is available, the game automatically runs in **Demo Mode**:
 - Single-player experience in browser
 - Score saved to localStorage
-- Same physics and gameplay
+- Same 60fps physics and gameplay
 
 ## Customization
 
-In `server/index.js`:
+In `server/src/index.ts`:
 
-```javascript
-const TICK_RATE = 20;        // Game speed
+```typescript
+const TICK_RATE = 60;        // Game speed (60fps!)
 const WORLD_WIDTH = 800;     // World size
 const WORLD_HEIGHT = 600;
 const POINT_COUNT = 30;      // How many points float around
@@ -87,6 +97,12 @@ const COLLECTION_RADIUS = 25; // How close to collect a point
 - **S / Arrow Down** - Move down
 - **A / Arrow Left** - Move left
 - **D / Arrow Right** - Move right
+
+## Tech Stack
+
+- **PartyServer** - WebSocket server framework (Cloudflare's evolution of PartyKit)
+- **Durable Objects** - Persistent state + alarms for continuous simulation
+- **Vercel** - Static client hosting
 
 ## License
 
