@@ -11,7 +11,7 @@ A persistent multiplayer 2D game where points float around the world and players
 
 ```
 ┌─────────────┐     WebSocket     ┌─────────────┐     ┌─────────────┐
-│   Vercel    │◀─────────────────▶│   Fly.io    │────▶│   Upstash   │
+│   Vercel    │◀─────────────────▶│  Railway    │────▶│   Upstash   │
 │  (client)   │                   │  (server)   │     │   (Redis)   │
 └─────────────┘                   └─────────────┘     └─────────────┘
 ```
@@ -35,80 +35,37 @@ The server runs a game loop at 20 ticks/second that:
 
 Players get a random ID stored in localStorage. Same browser = same player = same score.
 
-## Local Development
-
-### Prerequisites
-
-- Node.js 18+
-- Redis (local or Upstash)
-
-### Setup
-
-1. Install dependencies:
-   ```bash
-   cd server && npm install
-   ```
-
-2. Start Redis locally (or set `REDIS_URL` to your Upstash URL):
-   ```bash
-   # Using Docker
-   docker run -p 6379:6379 redis
-   ```
-
-3. Start the server:
-   ```bash
-   cd server && npm start
-   ```
-
-4. Serve the client:
-   ```bash
-   cd client && npx serve .
-   ```
-
-5. Open http://localhost:3000 in your browser
-
 ## Deployment
 
-### Server (Fly.io)
+### Server (Railway)
 
-1. Install the Fly CLI and authenticate:
-   ```bash
-   fly auth login
-   ```
-
-2. Create the app:
-   ```bash
-   cd server
-   fly launch
-   ```
-
-3. Set your Redis URL:
-   ```bash
-   fly secrets set REDIS_URL=redis://your-upstash-url
-   ```
-
-4. Deploy:
-   ```bash
-   fly deploy
-   ```
+1. Go to [railway.app](https://railway.app) and create a new project
+2. Select "Deploy from GitHub repo"
+3. Choose this repository
+4. Set the root directory to `server`
+5. Add environment variable:
+   - `REDIS_URL` = your Upstash Redis URL
+6. Railway will auto-deploy and give you a URL like `https://your-app.up.railway.app`
 
 ### Client (Vercel)
 
-1. Update `game.js` with your Fly.io WebSocket URL:
-   ```javascript
-   const WS_URL = 'wss://your-app.fly.dev';
-   ```
-
-2. Deploy to Vercel:
-   ```bash
-   cd client
-   vercel
-   ```
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Import this GitHub repository
+3. Add environment variable:
+   - `WEBSOCKET_URL` = `wss://your-railway-app.up.railway.app`
+4. Deploy - Vercel will serve the `client/` folder
 
 ### Redis (Upstash)
 
 1. Create a free Redis database at [upstash.com](https://upstash.com)
-2. Copy the Redis URL and set it as a secret on Fly.io
+2. Copy the Redis URL and add it to Railway
+
+## Demo Mode
+
+If no server is available, the game automatically runs in **Demo Mode**:
+- Single-player experience in browser
+- Score saved to localStorage
+- Same physics and gameplay
 
 ## Customization
 
