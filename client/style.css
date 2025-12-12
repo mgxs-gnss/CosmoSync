@@ -5,73 +5,97 @@
 }
 
 body {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: #0a0a1a;
   min-height: 100vh;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: #fff;
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 20px;
+  overflow: hidden;
 }
 
-#game-container {
+/* Name overlay */
+#name-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 26, 0.95);
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 15px;
+  z-index: 100;
 }
 
-#header {
-  display: flex;
-  align-items: center;
-  gap: 30px;
+#name-overlay.hidden {
+  display: none;
 }
 
-h1 {
-  font-size: 2.5rem;
-  background: linear-gradient(90deg, #4ECDC4, #45B7D1, #96CEB4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  text-shadow: 0 0 30px rgba(78, 205, 196, 0.3);
+#name-modal {
+  text-align: center;
 }
 
-#score-display {
+#name-modal h2 {
   font-size: 1.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 8px 20px;
-  border-radius: 20px;
-  border: 2px solid rgba(78, 205, 196, 0.5);
+  color: #4ECDC4;
+  margin-bottom: 20px;
 }
 
-#score {
-  color: #4ECDC4;
+#name-input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(78, 205, 196, 0.5);
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 1.2rem;
+  color: #fff;
+  text-align: center;
+  outline: none;
+  width: 200px;
+}
+
+#name-input:focus {
+  border-color: #4ECDC4;
+}
+
+#name-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+#start-btn {
+  display: block;
+  margin: 15px auto 0;
+  background: #4ECDC4;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 40px;
+  font-size: 1rem;
+  color: #0a0a1a;
+  cursor: pointer;
   font-weight: bold;
 }
 
-#canvas-container {
+#start-btn:hover {
+  background: #45B7D1;
+}
+
+/* Game container */
+#game-container {
   position: relative;
-  border-radius: 10px;
-  overflow: hidden;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 
 #game-canvas {
   display: block;
-  background: linear-gradient(180deg, #0a0a1a 0%, #1a1a3e 100%);
-  border: 3px solid rgba(78, 205, 196, 0.3);
-  border-radius: 10px;
+  background: #0a0a1a;
+  border-radius: 4px;
 }
 
 #connection-status {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 5px 15px;
-  border-radius: 15px;
-  font-size: 0.9rem;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
 }
 
 #connection-status.connected {
@@ -86,79 +110,35 @@ h1 {
   color: #FFEAA7;
 }
 
+#score-display {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+}
+
+#score {
+  color: #4ECDC4;
+  font-weight: bold;
+}
+
 #instructions {
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.7);
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 kbd {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 4px 10px;
-  border-radius: 5px;
-  margin: 0 3px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin: 0 2px;
   font-family: inherit;
-}
-
-#leaderboard {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 15px 25px;
-  min-width: 200px;
-  backdrop-filter: blur(10px);
-}
-
-#leaderboard h3 {
-  text-align: center;
-  margin-bottom: 10px;
-  color: #4ECDC4;
-}
-
-#player-list {
-  list-style: none;
-  max-height: 150px;
-  overflow-y: auto;
-}
-
-#player-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-#player-list li:last-child {
-  border-bottom: none;
-}
-
-.player-color {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-
-.player-score {
-  margin-left: auto;
-  color: #FFEAA7;
-}
-
-.player-you {
-  font-weight: bold;
-  color: #4ECDC4;
-}
-
-/* Scrollbar styling */
-#player-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-#player-list::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-}
-
-#player-list::-webkit-scrollbar-thumb {
-  background: rgba(78, 205, 196, 0.5);
-  border-radius: 3px;
+  font-size: 0.7rem;
 }

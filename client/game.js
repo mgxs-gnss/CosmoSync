@@ -3,7 +3,9 @@ const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreDisplay = document.getElementById('score');
 const connectionStatus = document.getElementById('connection-status');
-const playerList = document.getElementById('player-list');
+const nameOverlay = document.getElementById('name-overlay');
+const nameInput = document.getElementById('name-input');
+const startBtn = document.getElementById('start-btn');
 
 // Configuration
 const WORLD_WIDTH = 800;
@@ -15,7 +17,7 @@ const COLLECTION_RADIUS = 25;
 const TICK_RATE = 60;
 
 // Server configuration - UPDATE THIS after deploying to Cloudflare
-const WORKER_HOST = window.WORKER_HOST || 'https://point-world-game.fernando-e92.workers.dev;
+const WORKER_HOST = window.WORKER_HOST || 'point-world-game.fernando-e92.workers.dev';
 
 // Get or create player ID
 let playerId = localStorage.getItem('pointworld_player_id');
@@ -23,6 +25,9 @@ if (!playerId) {
   playerId = 'player_' + Math.random().toString(36).substr(2, 9);
   localStorage.setItem('pointworld_player_id', playerId);
 }
+
+// Player name
+let playerName = localStorage.getItem('pointworld_name') || '';
 
 // Game state
 let players = [];
@@ -34,6 +39,7 @@ let myScore = parseInt(localStorage.getItem('pointworld_score') || '0', 10);
 // Demo mode state
 let demoMode = false;
 let myPlayer = null;
+let gameStarted = false;
 
 // Input state
 const keys = {
@@ -46,6 +52,55 @@ const keys = {
 let socket = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
+
+// Particle system for spacebar
+const particles = [];
+
+function createParticleBurst(x, y) {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#F7DC6F'];
+  const count = 20 + Math.floor(Math.random() * 15);
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
+    const speed = 2 + Math.random() * 4;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      life: 1,
+      decay: 0.015 + Math.random() * 0.01,
+      size: 3 + Math.random() * 4,
+      color: colors[Math.floor(Math.random() * colors.length)]
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vx *= 0.98;
+    p.vy *= 0.98;
+    p.life -= p.decay;
+
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
 
 // Generate a random color for players
 function randomColor() {
@@ -75,6 +130,7 @@ function startDemoMode() {
   // Initialize player
   myPlayer = {
     id: playerId,
+    name: playerName,
     x: worldWidth / 2,
     y: worldHeight / 2,
     score: myScore,
@@ -91,7 +147,6 @@ function startDemoMode() {
 
   // Update score display
   scoreDisplay.textContent = myScore;
-  updateLeaderboard();
 
   // Start game loop at 60fps for demo mode
   setInterval(demoGameLoop, 1000 / TICK_RATE);
@@ -145,8 +200,6 @@ function demoGameLoop() {
       points[i] = createPoint(point.id);
     }
   }
-
-  updateLeaderboard();
 }
 
 // Connect to Cloudflare Worker
@@ -180,7 +233,8 @@ function connect() {
 
     socket.send(JSON.stringify({
       type: 'join',
-      playerId
+      playerId,
+      name: playerName
     }));
   };
 
@@ -200,7 +254,6 @@ function connect() {
       case 'state':
         players = message.players;
         points = message.points;
-        updateLeaderboard();
         break;
 
       case 'collected':
@@ -247,6 +300,8 @@ function sendInput() {
 
 // Input handling
 document.addEventListener('keydown', (e) => {
+  if (!gameStarted) return;
+
   let changed = false;
 
   switch (e.key.toLowerCase()) {
@@ -266,6 +321,14 @@ document.addEventListener('keydown', (e) => {
     case 'arrowright':
       if (!keys.right) { keys.right = true; changed = true; }
       break;
+    case ' ':
+      // Spacebar - create particle burst at player position
+      e.preventDefault();
+      const player = demoMode ? myPlayer : players.find(p => p.id === playerId);
+      if (player) {
+        createParticleBurst(player.x, player.y);
+      }
+      return;
   }
 
   if (changed) {
@@ -275,6 +338,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
+  if (!gameStarted) return;
+
   let changed = false;
 
   switch (e.key.toLowerCase()) {
@@ -315,22 +380,6 @@ function showCollectionEffect(collected) {
       offsetY: 0
     });
   }
-}
-
-// Update leaderboard
-function updateLeaderboard() {
-  const sorted = [...players].sort((a, b) => b.score - a.score);
-
-  playerList.innerHTML = sorted.map(player => {
-    const isYou = player.id === playerId;
-    return `
-      <li>
-        <span class="player-color" style="background: ${player.color}"></span>
-        <span class="${isYou ? 'player-you' : ''}">${isYou ? 'You' : player.id.slice(0, 8)}</span>
-        <span class="player-score">${player.score}</span>
-      </li>
-    `;
-  }).join('');
 }
 
 // Render loop (always 60fps)
@@ -414,13 +463,19 @@ function render() {
     ctx.stroke();
 
     // Name tag
+    const displayName = isMe ? playerName || 'You' : (player.name || player.id.slice(0, 6));
+    const nameWidth = Math.max(ctx.measureText(displayName).width + 10, 40);
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(player.x - 25, player.y - 35, 50, 16);
+    ctx.fillRect(player.x - nameWidth / 2, player.y - 35, nameWidth, 16);
     ctx.fillStyle = '#fff';
     ctx.font = '11px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(isMe ? 'You' : player.id.slice(0, 6), player.x, player.y - 24);
+    ctx.fillText(displayName, player.x, player.y - 24);
   }
+
+  // Draw particles
+  updateParticles();
+  drawParticles();
 
   // Draw collection effects
   for (let i = collectionEffects.length - 1; i >= 0; i--) {
@@ -442,13 +497,37 @@ function render() {
   requestAnimationFrame(render);
 }
 
-// Start the game
-connect();
+// Name input handling
+function startGame() {
+  const name = nameInput.value.trim() || 'Player';
+  playerName = name;
+  localStorage.setItem('pointworld_name', playerName);
+
+  nameOverlay.classList.add('hidden');
+  gameStarted = true;
+
+  // Start the game
+  connect();
+}
+
+// Check if we have a saved name
+if (playerName) {
+  nameInput.value = playerName;
+}
+
+startBtn.addEventListener('click', startGame);
+nameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    startGame();
+  }
+});
+
+// Start render loop immediately
 render();
 
 // Send input continuously while keys are held
 setInterval(() => {
-  if (!demoMode && (keys.up || keys.down || keys.left || keys.right)) {
+  if (gameStarted && !demoMode && (keys.up || keys.down || keys.left || keys.right)) {
     sendInput();
   }
 }, 16); // ~60fps input rate
