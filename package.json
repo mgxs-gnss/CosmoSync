@@ -1,0 +1,22 @@
+{
+  "name": "point-world",
+  "version": "1.0.0",
+  "description": "A persistent multiplayer 2D game where points float around the world and players collect them",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "cd server && npm start",
+    "dev:client": "cd client && npx serve .",
+    "install:all": "npm install && cd server && npm install"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "websocket",
+    "realtime"
+  ],
+  "license": "MIT"
+}

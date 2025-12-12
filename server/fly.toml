@@ -1,0 +1,23 @@
+# fly.toml for Point World Server
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+
+app = "point-world-server"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false  # Keep running for persistent world
+  auto_start_machines = true
+  min_machines_running = 1    # Always have one instance running
+  processes = ["app"]
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

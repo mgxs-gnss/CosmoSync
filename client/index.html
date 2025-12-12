@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Point World</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="game-container">
+    <div id="header">
+      <h1>Point World</h1>
+      <div id="score-display">Score: <span id="score">0</span></div>
+    </div>
+    <div id="canvas-container">
+      <canvas id="game-canvas" width="800" height="600"></canvas>
+      <div id="connection-status">Connecting...</div>
+    </div>
+    <div id="instructions">
+      Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or Arrow Keys to move
+    </div>
+    <div id="leaderboard">
+      <h3>Players Online</h3>
+      <ul id="player-list"></ul>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
