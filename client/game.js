@@ -15,7 +15,7 @@ const COLLECTION_RADIUS = 25;
 const TICK_RATE = 60;
 
 // Server configuration - UPDATE THIS after deploying to Cloudflare
-const WORKER_HOST = window.WORKER_HOST || 'point-world.your-account.workers.dev';
+const WORKER_HOST = window.WORKER_HOST || 'https://point-world-game.fernando-e92.workers.dev;
 
 // Get or create player ID
 let playerId = localStorage.getItem('pointworld_player_id');
