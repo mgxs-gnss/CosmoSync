@@ -1,9 +1,18 @@
-// Point World Client
+// Point World Client - with Demo Mode
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 const scoreDisplay = document.getElementById('score');
 const connectionStatus = document.getElementById('connection-status');
 const playerList = document.getElementById('player-list');
+
+// Configuration
+const WORLD_WIDTH = 800;
+const WORLD_HEIGHT = 600;
+const POINT_COUNT = 30;
+const POINT_SPEED = 0.5;
+const PLAYER_SPEED = 5;
+const COLLECTION_RADIUS = 25;
+const TICK_RATE = 20;
 
 // Get or create player ID
 let playerId = localStorage.getItem('pointworld_player_id');
@@ -15,9 +24,13 @@ if (!playerId) {
 // Game state
 let players = [];
 let points = [];
-let worldWidth = 800;
-let worldHeight = 600;
-let myScore = 0;
+let worldWidth = WORLD_WIDTH;
+let worldHeight = WORLD_HEIGHT;
+let myScore = parseInt(localStorage.getItem('pointworld_score') || '0', 10);
+
+// Demo mode state
+let demoMode = false;
+let myPlayer = null;
 
 // Input state
 const keys = {
@@ -28,24 +41,139 @@ const keys = {
 };
 
 // WebSocket connection
-const WS_URL = window.location.hostname === 'localhost'
-  ? 'ws://localhost:8080'
-  : (window.WEBSOCKET_URL || 'wss://point-world-server.fly.dev');
+const WS_URL = window.WEBSOCKET_URL ||
+  (window.location.hostname === 'localhost' ? 'ws://localhost:8080' : 'wss://point-world-server.fly.dev');
 
 let ws = null;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_RECONNECT_ATTEMPTS = 3; // Fewer attempts before switching to demo mode
+
+// Generate a random color for players
+function randomColor() {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
+  return colors[Math.floor(Math.random() * colors.length)];
+}
+
+// Create a point
+function createPoint(id) {
+  return {
+    id,
+    x: Math.random() * worldWidth,
+    y: Math.random() * worldHeight,
+    vx: (Math.random() - 0.5) * POINT_SPEED * 2,
+    vy: (Math.random() - 0.5) * POINT_SPEED * 2,
+    value: Math.floor(Math.random() * 3) + 1
+  };
+}
+
+// Initialize demo mode
+function startDemoMode() {
+  demoMode = true;
+  connectionStatus.textContent = 'Demo Mode';
+  connectionStatus.className = 'demo';
+  console.log('Starting demo mode (single player)');
+
+  // Initialize player
+  myPlayer = {
+    id: playerId,
+    x: worldWidth / 2,
+    y: worldHeight / 2,
+    score: myScore,
+    color: localStorage.getItem('pointworld_color') || randomColor()
+  };
+  localStorage.setItem('pointworld_color', myPlayer.color);
+  players = [myPlayer];
+
+  // Initialize points
+  points = [];
+  for (let i = 0; i < POINT_COUNT; i++) {
+    points.push(createPoint(i));
+  }
+
+  // Update score display
+  scoreDisplay.textContent = myScore;
+  updateLeaderboard();
+
+  // Start game loop
+  setInterval(demoGameLoop, 1000 / TICK_RATE);
+}
+
+// Demo mode game loop
+function demoGameLoop() {
+  if (!demoMode) return;
+
+  // Update player position based on input
+  if (keys.up) myPlayer.y -= PLAYER_SPEED;
+  if (keys.down) myPlayer.y += PLAYER_SPEED;
+  if (keys.left) myPlayer.x -= PLAYER_SPEED;
+  if (keys.right) myPlayer.x += PLAYER_SPEED;
+
+  // Keep player in bounds
+  myPlayer.x = Math.max(15, Math.min(worldWidth - 15, myPlayer.x));
+  myPlayer.y = Math.max(15, Math.min(worldHeight - 15, myPlayer.y));
+
+  // Update points (bouncing physics)
+  for (const point of points) {
+    point.x += point.vx;
+    point.y += point.vy;
+
+    if (point.x <= 0 || point.x >= worldWidth) {
+      point.vx *= -1;
+      point.x = Math.max(0, Math.min(worldWidth, point.x));
+    }
+    if (point.y <= 0 || point.y >= worldHeight) {
+      point.vy *= -1;
+      point.y = Math.max(0, Math.min(worldHeight, point.y));
+    }
+  }
+
+  // Check collisions
+  for (let i = points.length - 1; i >= 0; i--) {
+    const point = points[i];
+    const dx = myPlayer.x - point.x;
+    const dy = myPlayer.y - point.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    if (distance < COLLECTION_RADIUS) {
+      myScore += point.value;
+      myPlayer.score = myScore;
+      scoreDisplay.textContent = myScore;
+      localStorage.setItem('pointworld_score', myScore);
+
+      showCollectionEffect({ value: point.value });
+
+      // Respawn point
+      points[i] = createPoint(point.id);
+    }
+  }
+
+  updateLeaderboard();
+}
 
 function connect() {
-  ws = new WebSocket(WS_URL);
+  try {
+    ws = new WebSocket(WS_URL);
+  } catch (e) {
+    console.log('WebSocket not available, starting demo mode');
+    startDemoMode();
+    return;
+  }
+
+  const connectionTimeout = setTimeout(() => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      ws.close();
+      startDemoMode();
+    }
+  }, 3000);
 
   ws.onopen = () => {
+    clearTimeout(connectionTimeout);
     console.log('Connected to server');
     connectionStatus.textContent = 'Connected';
     connectionStatus.className = 'connected';
     reconnectAttempts = 0;
+    demoMode = false;
 
-    // Join the game
     ws.send(JSON.stringify({
       type: 'join',
       playerId
@@ -72,7 +200,6 @@ function connect() {
         break;
 
       case 'collected':
-        // Update score if we collected a point
         for (const collected of message.points) {
           if (collected.playerId === playerId) {
             myScore += collected.value;
@@ -85,16 +212,18 @@ function connect() {
   };
 
   ws.onclose = () => {
+    clearTimeout(connectionTimeout);
     console.log('Disconnected from server');
     connectionStatus.textContent = 'Disconnected';
     connectionStatus.className = 'disconnected';
 
-    // Attempt to reconnect
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+    if (!demoMode && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       reconnectAttempts++;
-      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 5000);
       console.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
       setTimeout(connect, delay);
+    } else if (!demoMode) {
+      startDemoMode();
     }
   };
 
@@ -103,9 +232,8 @@ function connect() {
   };
 }
 
-// Send input to server
 function sendInput() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (!demoMode && ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({
       type: 'input',
       ...keys
@@ -173,8 +301,7 @@ document.addEventListener('keyup', (e) => {
 const collectionEffects = [];
 
 function showCollectionEffect(collected) {
-  // Find the point position (approximate)
-  const player = players.find(p => p.id === playerId);
+  const player = demoMode ? myPlayer : players.find(p => p.id === playerId);
   if (player) {
     collectionEffects.push({
       x: player.x,
@@ -204,7 +331,7 @@ function updateLeaderboard() {
 
 // Render loop
 function render() {
-  // Clear canvas
+  // Clear canvas with slight trail effect
   ctx.fillStyle = 'rgba(10, 10, 26, 0.3)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -315,9 +442,9 @@ function render() {
 connect();
 render();
 
-// Send input continuously while keys are held
+// Send input continuously while keys are held (for multiplayer mode)
 setInterval(() => {
-  if (keys.up || keys.down || keys.left || keys.right) {
+  if (!demoMode && (keys.up || keys.down || keys.left || keys.right)) {
     sendInput();
   }
 }, 50);

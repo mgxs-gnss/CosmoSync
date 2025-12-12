@@ -82,6 +82,10 @@ h1 {
   color: #FF6B6B;
 }
 
+#connection-status.demo {
+  color: #FFEAA7;
+}
+
 #instructions {
   font-size: 1rem;
   color: rgba(255, 255, 255, 0.7);
