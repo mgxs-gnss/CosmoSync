@@ -4,118 +4,85 @@ A persistent multiplayer 2D game where points float around the world and players
 
 - **Realtime multiplayer** - see other players moving
 - **Persistent scores** - your points are saved forever
-- **Always running** - simulation continues even with no players
+- **Always running** - simulation continues even with no players (using Durable Objects alarms)
 - **One global world** - everyone shares the same space
+- **60fps** - smooth gameplay on both server and client
 
 ## Architecture
 
 ```
-┌─────────────┐     WebSocket     ┌─────────────┐     ┌─────────────┐
-│   Vercel    │◀─────────────────▶│   Fly.io    │────▶│   Upstash   │
-│  (client)   │                   │  (server)   │     │   (Redis)   │
-└─────────────┘                   └─────────────┘     └─────────────┘
+┌─────────────┐     WebSocket     ┌─────────────────────┐
+│   Vercel    │◀─────────────────▶│  Cloudflare Workers │
+│  (client)   │                   │  (PartyServer)      │
+└─────────────┘                   │  + Durable Objects  │
+                                  └─────────────────────┘
 ```
+
+**No external database needed!** Durable Objects have built-in persistent storage.
 
 ## How It Works
 
 ### World Simulation
 
-The server runs a game loop at 20 ticks/second that:
+The server runs a game loop at 60 ticks/second using Durable Objects alarms:
 - Moves all floating points around (with bouncing physics)
 - Checks for player-point collisions
 - Broadcasts state to all connected clients
+- **Continues running even with no players connected**
 
 ### Persistence
 
-- **Player scores**: Saved to Redis immediately when a point is collected
-- **World state**: Saved every 30 seconds
-- **On restart**: Server loads the last saved state from Redis
+- **Player scores**: Saved to Durable Objects storage immediately
+- **World state**: Auto-saved every 30 seconds
+- **On restart**: Server loads the last saved state automatically
 
 ### Anonymous Players
 
 Players get a random ID stored in localStorage. Same browser = same player = same score.
 
-## Local Development
-
-### Prerequisites
-
-- Node.js 18+
-- Redis (local or Upstash)
-
-### Setup
-
-1. Install dependencies:
-   ```bash
-   cd server && npm install
-   ```
-
-2. Start Redis locally (or set `REDIS_URL` to your Upstash URL):
-   ```bash
-   # Using Docker
-   docker run -p 6379:6379 redis
-   ```
-
-3. Start the server:
-   ```bash
-   cd server && npm start
-   ```
-
-4. Serve the client:
-   ```bash
-   cd client && npx serve .
-   ```
-
-5. Open http://localhost:3000 in your browser
-
 ## Deployment
 
-### Server (Fly.io)
+### Server (Cloudflare Workers)
 
-1. Install the Fly CLI and authenticate:
+1. Install Wrangler CLI:
    ```bash
-   fly auth login
+   npm install -g wrangler
+   wrangler login
    ```
 
-2. Create the app:
+2. Deploy the server:
    ```bash
    cd server
-   fly launch
+   npm install
+   npm run deploy
    ```
 
-3. Set your Redis URL:
-   ```bash
-   fly secrets set REDIS_URL=redis://your-upstash-url
-   ```
-
-4. Deploy:
-   ```bash
-   fly deploy
-   ```
+3. Note your Worker URL: `https://point-world.<your-account>.workers.dev`
 
 ### Client (Vercel)
 
-1. Update `game.js` with your Fly.io WebSocket URL:
+1. Update `client/game.js` line 18 with your Worker URL:
    ```javascript
-   const WS_URL = 'wss://your-app.fly.dev';
+   const PARTYSERVER_HOST = 'point-world.your-account.workers.dev';
    ```
 
-2. Deploy to Vercel:
-   ```bash
-   cd client
-   vercel
-   ```
+2. Go to [vercel.com/new](https://vercel.com/new)
+3. Import this GitHub repository
+4. Deploy
 
-### Redis (Upstash)
+## Demo Mode
 
-1. Create a free Redis database at [upstash.com](https://upstash.com)
-2. Copy the Redis URL and set it as a secret on Fly.io
+If no server is available, the game automatically runs in **Demo Mode**:
+- Single-player experience in browser
+- Score saved to localStorage
+- Same 60fps physics and gameplay
 
 ## Customization
 
-In `server/index.js`:
+In `server/src/index.ts`:
 
-```javascript
-const TICK_RATE = 20;        // Game speed
+```typescript
+const TICK_RATE = 60;        // Game speed (60fps!)
 const WORLD_WIDTH = 800;     // World size
 const WORLD_HEIGHT = 600;
 const POINT_COUNT = 30;      // How many points float around
@@ -130,6 +97,12 @@ const COLLECTION_RADIUS = 25; // How close to collect a point
 - **S / Arrow Down** - Move down
 - **A / Arrow Left** - Move left
 - **D / Arrow Right** - Move right
+
+## Tech Stack
+
+- **PartyServer** - WebSocket server framework (Cloudflare's evolution of PartyKit)
+- **Durable Objects** - Persistent state + alarms for continuous simulation
+- **Vercel** - Static client hosting
 
 ## License
 

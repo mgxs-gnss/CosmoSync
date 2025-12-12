@@ -1,17 +1,19 @@
 {
   "name": "point-world-server",
   "version": "1.0.0",
-  "description": "WebSocket game server for Point World",
-  "main": "index.js",
+  "description": "PartyServer game server for Point World",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail"
   },
   "dependencies": {
-    "ws": "^8.14.2",
-    "ioredis": "^5.3.2"
+    "partyserver": "^0.0.57"
   },
-  "engines": {
-    "node": ">=18"
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.99.0"
   }
 }
