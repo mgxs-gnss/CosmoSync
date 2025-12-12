@@ -466,8 +466,8 @@ function startGame() {
   nameOverlay.classList.add('hidden');
   gameStarted = true;
 
-  // Start the game
-  connect();
+  // Start directly in demo mode (skip server connection)
+  startDemoMode();
 }
 
 // Check if we have a saved name
