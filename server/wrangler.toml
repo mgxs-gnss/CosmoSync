@@ -9,4 +9,4 @@ class_name = "PointWorld"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["PointWorld"]
+new_sqlite_classes = ["PointWorld"]
