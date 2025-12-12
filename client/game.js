@@ -53,53 +53,20 @@ let socket = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 3;
 
-// Particle system for spacebar
-const particles = [];
+// Spawn a point at player position
+function spawnPointAtPlayer() {
+  const player = demoMode ? myPlayer : players.find(p => p.id === playerId);
+  if (!player) return;
 
-function createParticleBurst(x, y) {
-  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#F7DC6F'];
-  const count = 20 + Math.floor(Math.random() * 15);
-
-  for (let i = 0; i < count; i++) {
-    const angle = (Math.PI * 2 * i) / count + Math.random() * 0.3;
-    const speed = 2 + Math.random() * 4;
-    particles.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 1,
-      decay: 0.015 + Math.random() * 0.01,
-      size: 3 + Math.random() * 4,
-      color: colors[Math.floor(Math.random() * colors.length)]
-    });
-  }
-}
-
-function updateParticles() {
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx;
-    p.y += p.vy;
-    p.vx *= 0.98;
-    p.vy *= 0.98;
-    p.life -= p.decay;
-
-    if (p.life <= 0) {
-      particles.splice(i, 1);
-    }
-  }
-}
-
-function drawParticles() {
-  for (const p of particles) {
-    ctx.globalAlpha = p.life;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
+  const newPoint = {
+    id: Date.now(),
+    x: player.x,
+    y: player.y,
+    vx: (Math.random() - 0.5) * POINT_SPEED * 2,
+    vy: (Math.random() - 0.5) * POINT_SPEED * 2,
+    value: Math.floor(Math.random() * 3) + 1
+  };
+  points.push(newPoint);
 }
 
 // Generate a random color for players
@@ -322,12 +289,9 @@ document.addEventListener('keydown', (e) => {
       if (!keys.right) { keys.right = true; changed = true; }
       break;
     case ' ':
-      // Spacebar - create particle burst at player position
+      // Spacebar - spawn a point at player position
       e.preventDefault();
-      const player = demoMode ? myPlayer : players.find(p => p.id === playerId);
-      if (player) {
-        createParticleBurst(player.x, player.y);
-      }
+      spawnPointAtPlayer();
       return;
   }
 
@@ -472,10 +436,6 @@ function render() {
     ctx.textAlign = 'center';
     ctx.fillText(displayName, player.x, player.y - 24);
   }
-
-  // Draw particles
-  updateParticles();
-  drawParticles();
 
   // Draw collection effects
   for (let i = collectionEffects.length - 1; i >= 0; i--) {
