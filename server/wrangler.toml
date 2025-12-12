@@ -1,4 +1,4 @@
-name = "point-world"
+name = "point-world-game"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
@@ -9,4 +9,4 @@ class_name = "PointWorld"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["PointWorld"]
+new_sqlite_classes = ["PointWorld"]
